@@ -334,7 +334,7 @@
 
 #heroia-info-popup {
 	position: fixed;
-	bottom: 96px;
+	bottom: 150px;
 	right: 16px;
 	left: auto;
 	transform: none;
@@ -369,7 +369,7 @@
 	color: #000;
 }
 
-#hero-info-close {
+#heroia-info-close {
 	position: absolute;
 	top: 8px;
 	right: 8px;
