@@ -1,4 +1,5 @@
 import { findAnchorForToolbar } from './waDom.js';
+import { attachDisparoStatus } from './disparoStatus.js';
 
 const STORAGE_ACTIVATION = 'heroia_activation_v2';
 const INFO_WRAPPER_ID = 'heroia-info-wrapper';
@@ -11,7 +12,8 @@ let handlers = {
 	onCoreFollowUp: null,
 	onPdf: null,
 	onAudio: null,
-	onCredito: null
+	onCredito: null,
+	onDisparo: null
 };
 
 let toolbarEl = null;
@@ -23,7 +25,8 @@ const buttonConfig = [
 	{ id: 'hero-btn-core-follow', label: '🧠 Copiloto 🔁', className: 'hero-btn hero-btn-quaternary', handlerKey: 'onCoreFollowUp' },
 	{ id: 'hero-btn-pdf', label: '📄 PDF', className: 'hero-btn hero-btn-tertiary', handlerKey: 'onPdf' },
 	{ id: 'hero-btn-audio', label: '🎧 Audio', className: 'hero-btn hero-btn-muted', handlerKey: 'onAudio' },
-	{ id: 'hero-btn-credito', label: '💰 Crédito', className: 'hero-btn hero-btn-secondary', handlerKey: 'onCredito' }
+	{ id: 'hero-btn-credito', label: '💰 Crédito', className: 'hero-btn hero-btn-secondary', handlerKey: 'onCredito' },
+	{ id: 'hero-btn-disparo', label: '🚀 Disparo', className: 'hero-btn hero-btn-warning', handlerKey: 'onDisparo' }
 ];
 
 const maskLicense = license => {
@@ -214,6 +217,10 @@ const ensureButtons = container => {
 			container.appendChild(btn);
 		} else {
 			attachHandlerToButton(btn, cfg.handlerKey);
+		}
+
+		if (cfg.id === 'hero-btn-disparo') {
+			attachDisparoStatus(btn);
 		}
 	});
 };
