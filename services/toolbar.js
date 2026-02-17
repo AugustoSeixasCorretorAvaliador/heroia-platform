@@ -16,6 +16,7 @@ let handlers = {
 
 let toolbarEl = null;
 let infoListenersBound = false;
+const loadingTracked = new Set(['onCoreDraft', 'onCoreFollowUp', 'onAudio']);
 
 const buttonConfig = [
 	{ id: 'hero-btn-core-draft', label: 'Gerar rascunho', className: 'hero-btn', handlerKey: 'onCoreDraft' },
@@ -172,16 +173,36 @@ const ensureInfoButton = container => {
 	attachInfoListeners();
 };
 
+const toggleButtonLoading = (btn, isLoading) => {
+	if (!btn) return;
+	btn.classList.toggle('hero-btn-loading', isLoading);
+	btn.setAttribute('aria-busy', isLoading ? 'true' : 'false');
+};
+
+const attachHandlerToButton = (btn, handlerKey) => {
+	if (!btn) return;
+	btn.onclick = async () => {
+		const fn = handlers[handlerKey];
+		if (typeof fn !== 'function') return;
+		const trackLoading = loadingTracked.has(handlerKey);
+		if (trackLoading) toggleButtonLoading(btn, true);
+		try {
+			await fn();
+		} catch (err) {
+			console.error('HERO.IA toolbar handler error', err);
+		} finally {
+			if (trackLoading) toggleButtonLoading(btn, false);
+		}
+	};
+};
+
 const createButton = ({ id, label, className, handlerKey }) => {
 	const btn = document.createElement('button');
 	btn.id = id;
 	btn.type = 'button';
 	btn.className = className;
 	btn.textContent = label;
-	btn.addEventListener('click', () => {
-		const fn = handlers[handlerKey];
-		if (typeof fn === 'function') fn();
-	});
+	attachHandlerToButton(btn, handlerKey);
 	return btn;
 };
 
@@ -192,10 +213,7 @@ const ensureButtons = container => {
 			btn = createButton(cfg);
 			container.appendChild(btn);
 		} else {
-			btn.onclick = () => {
-				const fn = handlers[cfg.handlerKey];
-				if (typeof fn === 'function') fn();
-			};
+			attachHandlerToButton(btn, cfg.handlerKey);
 		}
 	});
 };

@@ -22,6 +22,23 @@
 	align-items: center;
 	gap: 6px;
 	transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
+	position: relative;
+}
+
+.hero-btn.hero-btn-loading {
+	padding-right: 28px;
+}
+
+.hero-btn.hero-btn-loading::after {
+	content: '⏳';
+	position: absolute;
+	right: 8px;
+	top: 50%;
+	transform: translateY(-50%);
+	font-size: 14px;
+	opacity: 0.65;
+	pointer-events: none;
+	filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.25));
 }
 
 .hero-btn:hover {
@@ -47,8 +64,8 @@
 }
 
 .hero-btn-muted {
-	background: linear-gradient(135deg, #e0e0e0, #bdbdbd);
-	color: #111;
+	background: rgba(0, 0, 0, 0.35);
+	color: #fff;
 }
 
 .hero-btn-disabled {
