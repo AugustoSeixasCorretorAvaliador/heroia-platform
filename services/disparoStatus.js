@@ -47,7 +47,7 @@ export function attachDisparoStatus(buttonEl) {
 		const msg = status === 'online'
 			? 'Servidor ativo'
 			: status === 'offline'
-				? 'Servidor offline'
+				? 'Execute DISPARO.BAT'
 				: 'Verificando servidor...';
 		buttonEl.setAttribute('title', msg);
 	};
