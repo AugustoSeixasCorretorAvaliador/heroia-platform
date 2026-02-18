@@ -1,6 +1,30 @@
 const HEALTH_URL = 'http://localhost:3000/health';
 const TIMEOUT_MS = 1500;
 
+const fetchHealthViaBackground = () => new Promise(resolve => {
+	try {
+		if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+			chrome.runtime.sendMessage({ type: 'HEALTH_CHECK', url: HEALTH_URL, timeout: TIMEOUT_MS }, resp => {
+				if (resp?.status === 'online') {
+					resolve('online');
+					return;
+				}
+				resolve('offline');
+			});
+			return;
+		}
+	} catch (err) {
+		// fallback below
+	}
+
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+	fetch(HEALTH_URL, { signal: controller.signal })
+		.then(res => resolve(res.ok ? 'online' : 'offline'))
+		.catch(() => resolve('offline'))
+		.finally(() => clearTimeout(timer));
+});
+
 export function attachDisparoStatus(buttonEl) {
 	if (!buttonEl || buttonEl.dataset.heroDisparoBound === '1') return;
 	buttonEl.dataset.heroDisparoBound = '1';
@@ -31,32 +55,24 @@ export function attachDisparoStatus(buttonEl) {
 	const setBadge = status => {
 		const badge = ensureBadge();
 		badge.classList.remove('hero-disparo-online', 'hero-disparo-offline');
-		badge.textContent = '';
 		if (status === 'online') {
 			badge.classList.add('hero-disparo-online');
-			badge.textContent = '';
 		} else if (status === 'offline') {
 			badge.classList.add('hero-disparo-offline');
-			badge.textContent = '';
 		}
 	};
 
-	const runHealthCheck = async () => {
+	const runHealthCheck = async (force = false) => {
 		if (isChecking) return lastStatus;
+		if (!force && hasChecked) return lastStatus;
 		isChecking = true;
 		setTooltip(null);
-		let controller;
-		let timer;
 		let status = 'offline';
 		try {
-			controller = new AbortController();
-			timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-			const res = await fetch(HEALTH_URL, { signal: controller.signal });
-			if (res.ok) status = 'online';
+			status = await fetchHealthViaBackground();
 		} catch (err) {
 			status = 'offline';
 		} finally {
-			clearTimeout(timer);
 			isChecking = false;
 			hasChecked = true;
 			lastStatus = status;
@@ -66,9 +82,11 @@ export function attachDisparoStatus(buttonEl) {
 		return status;
 	};
 
+	buttonEl._heroDisparoCheck = (force = false) => runHealthCheck(force);
+
 	buttonEl.addEventListener('mouseenter', () => {
 		if (!hasChecked) {
-			runHealthCheck();
+			runHealthCheck(true);
 			return;
 		}
 		setTooltip(lastStatus);
@@ -76,10 +94,9 @@ export function attachDisparoStatus(buttonEl) {
 
 	buttonEl.addEventListener('click', () => {
 		hasChecked = false;
-		runHealthCheck();
+		runHealthCheck(true);
 	});
 
-	// Initial badge render (neutral)
 	setBadge(lastStatus);
 	setTooltip(lastStatus);
 }

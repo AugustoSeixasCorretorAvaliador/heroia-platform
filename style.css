@@ -68,15 +68,11 @@
 	color: #fff;
 }
 
-.hero-btn-disabled {
-	opacity: 0.6;
-	cursor: not-allowed;
+.hero-btn-warning {
+	background: #facc15;
+	color: #111827;
 }
 
-#heroia-analysis-panel {
-	position: fixed;
-	bottom: 12px;
-	left: 12px;
 .hero-disparo-status {
 	width: 10px;
 	height: 10px;
@@ -87,12 +83,24 @@
 	opacity: 0.9;
 	box-shadow: 0 0 0 1px rgba(0,0,0,0.08);
 }
+
 .hero-disparo-online {
 	background: #10b981;
 }
+
 .hero-disparo-offline {
 	background: #ef4444;
 }
+
+.hero-btn-disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+#heroia-analysis-panel {
+	position: fixed;
+	bottom: 12px;
+	left: 12px;
 	width: 480px;
 	max-height: 360px;
 	background: rgba(124, 58, 237, 0.88);

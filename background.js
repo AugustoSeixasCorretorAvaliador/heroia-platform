@@ -2,6 +2,7 @@ const PREFIX = '[HERO-AUDIO]';
 const PRIMARY_MODEL = 'gpt-4o-mini-transcribe';
 const FALLBACK_MODEL = 'whisper-1';
 const REQUEST_TIMEOUT_MS = 60000;
+const HEALTH_TIMEOUT_MS = 1500;
 const MAX_FILE_BYTES = 24 * 1024 * 1024; // ~24MB safety cap
 const RECENT_DOWNLOAD_MS = 10 * 60 * 1000; // 10 minutos
 
@@ -35,7 +36,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch((err) => sendResponse({ ok: false, error: err?.message || 'Falha ao ler downloads.' }));
     return true;
   }
+  if (message.type === 'HEALTH_CHECK') {
+    handleHealthCheck(message).then(sendResponse);
+    return true;
+  }
 });
+
+async function handleHealthCheck(message) {
+  const url = message?.url;
+  const timeout = Number(message?.timeout) || HEALTH_TIMEOUT_MS;
+  if (!url) return { status: 'offline' };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  try {
+    const resp = await fetch(url, { signal: controller.signal });
+    return { status: resp.ok ? 'online' : 'offline' };
+  } catch (err) {
+    return { status: 'offline' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 async function getApiKey() {
   const stored = await chrome.storage.local.get(['openaiApiKey']);

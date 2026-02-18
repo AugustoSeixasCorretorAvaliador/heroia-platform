@@ -27,7 +27,14 @@
 			onCoreFollowUp: core.runCoreFollowUp,
 			onPdf: pdf.runPdf,
 			onAudio: audio.runAudio,
-			onCredito: credito.runCredito
+			onCredito: credito.runCredito,
+			onDisparo: () => {
+				try {
+					window.open('http://localhost:3000', '_blank', 'noopener');
+				} catch (err) {
+					console.error('HERO IA disparo open error', err);
+				}
+			}
 		});
 	};
 
