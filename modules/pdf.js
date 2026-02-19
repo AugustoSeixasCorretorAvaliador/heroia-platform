@@ -1,7 +1,8 @@
 import { insertTextDraft } from '../services/textInsert.js';
+import { getFileByName, listFilesByType } from './pdfManager.js';
+import { injectFileIntoWhatsApp } from './whatsappUploader.js';
+import { getUsableDirectoryHandle, ensurePermission, reconnectFlow } from './fileSystem.js';
 
-const SSD_BASE_URL = 'https://pdf.hero.ia.br';
-const SSD_INDEX_URL = `${SSD_BASE_URL}/index.json`;
 const overlayIds = {
 	overlay: 'hero-ssd-overlay',
 	panel: 'hero-ssd-panel',
@@ -11,61 +12,22 @@ const overlayIds = {
 	item: 'hero-ssd-item',
 	tipo: 'hero-ssd-tipo',
 	message: 'hero-ssd-message',
-	send: 'hero-ssd-send'
+	send: 'hero-ssd-send',
+	reconnect: 'hero-ssd-reconnect'
 };
 
-let ssdIndex = null;
-let ssdBase = SSD_BASE_URL;
-let listenerAttached = false;
+const pdfTypes = [
+	{ value: 'BOOK', label: 'Book' },
+	{ value: 'TABELA', label: 'Tabela de Preço' },
+	{ value: 'DISPO', label: 'Disponibilidade' },
+	{ value: 'REPASSE', label: 'Repasse' }
+];
 
-const ensureFetchListener = () => {
-	if (listenerAttached) return;
-	listenerAttached = true;
-
-	window.addEventListener('message', async (event) => {
-		if (event.source !== window || event.data.type !== 'SSD_FETCH_PDF') return;
-		const { url, requestId } = event.data;
-		try {
-			const pdfResponse = await fetch(url);
-			if (!pdfResponse.ok) throw new Error(`HTTP ${pdfResponse.status}`);
-			const blob = await pdfResponse.blob();
-			const reader = new FileReader();
-			reader.onload = () => {
-				window.postMessage({ type: 'SSD_PDF_RESPONSE', requestId, success: true, data: reader.result }, '*');
-			};
-			reader.readAsDataURL(blob);
-		} catch (err) {
-			window.postMessage({ type: 'SSD_PDF_RESPONSE', requestId, success: false, error: err.message }, '*');
-		}
-	});
+const state = {
+	directoryHandle: null,
+	selectedType: pdfTypes[0].value,
+	selectedName: null
 };
-
-const loadIndex = async () => {
-	if (ssdIndex) return ssdIndex;
-	const response = await fetch(SSD_INDEX_URL, { cache: 'no-store' });
-	if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-	ssdIndex = await response.json();
-	return ssdIndex;
-};
-
-const fetchPdfViaContent = (url) => new Promise((resolve, reject) => {
-	const requestId = `pdf_${Date.now()}_${Math.random()}`;
-	const listener = (event) => {
-		if (event.source !== window || event.data.type !== 'SSD_PDF_RESPONSE') return;
-		if (event.data.requestId !== requestId) return;
-		window.removeEventListener('message', listener);
-		if (event.data.success) resolve(event.data.data);
-		else reject(new Error(event.data.error));
-	};
-
-	window.addEventListener('message', listener);
-	setTimeout(() => {
-		window.removeEventListener('message', listener);
-		reject(new Error('Timeout ao baixar PDF'));
-	}, 10000);
-
-	window.postMessage({ type: 'SSD_FETCH_PDF', url, requestId }, '*');
-});
 
 const showNotification = (message, type = 'success') => {
 	const notification = document.createElement('div');
@@ -99,61 +61,68 @@ const showNotification = (message, type = 'success') => {
 	}, 4000);
 };
 
-const ensureOverlay = (index) => {
-	if (document.getElementById(overlayIds.overlay)) return document.getElementById(overlayIds.overlay);
+const ensureSupport = () => {
+	if (!('showDirectoryPicker' in window)) {
+		throw new Error('File System Access API não é suportada. Use o Chrome Desktop.');
+	}
+	if (typeof DataTransfer === 'undefined') {
+		throw new Error('Seu navegador não permite anexar arquivos localmente.');
+	}
+};
 
-	const produtos = Object.entries(index)
-		.map(([id, p]) => ({ id, nome: p.nome }))
-		.sort((a, b) => a.nome.localeCompare(b.nome));
+const setMessage = (text, tone = 'info') => {
+	const messageDiv = document.getElementById(overlayIds.message);
+	if (!messageDiv) return;
+	const palette = {
+		info: { bg: '#e3f2fd', color: '#0d47a1' },
+		success: { bg: '#d4edda', color: '#155724' },
+		warning: { bg: '#fff3cd', color: '#856404' },
+		error: { bg: '#f8d7da', color: '#721c24' }
+	}[tone] || { bg: '#e3f2fd', color: '#0d47a1' };
+	messageDiv.style.display = 'block';
+	messageDiv.style.background = palette.bg;
+	messageDiv.style.color = palette.color;
+	messageDiv.textContent = text;
+};
 
-	const overlay = document.createElement('div');
-	overlay.id = overlayIds.overlay;
-	overlay.innerHTML = `
-		<div class="hero-ssd-panel" id="${overlayIds.panel}">
-			<header>
-				<strong>Enviar PDF (SSD)</strong>
-				<button id="${overlayIds.close}">×</button>
-			</header>
-			<section>
-				<label>Tipo de Documento</label>
-				<select id="${overlayIds.tipo}">
-					<option value="book">Book</option>
-					<option value="preco">Tabela de Preço</option>
-					<option value="disponibilidade">Disponibilidade</option>
-					<option value="repasse">Repasse</option>
-				</select>
-				<label>Selecione o Produto</label>
-				<div class="hero-ssd-picker" id="${overlayIds.picker}">
-					<div class="hero-ssd-picker-inner" id="${overlayIds.pickerInner}">
-						<div class="hero-ssd-spacer"></div>
-						${produtos.map(p => `
-							<div class="hero-ssd-item" data-id="${p.id}">
-								${p.nome}
-							</div>`).join('')}
-						<div class="hero-ssd-spacer"></div>
-					</div>
-					<div class="hero-ssd-picker-fade-bottom"></div>
-				</div>
-			</section>
-			<footer>
-				<div id="${overlayIds.message}" style="display:none; padding:8px; margin-bottom:8px; border-radius:4px; font-size:13px; text-align:center;"></div>
-				<button id="${overlayIds.send}">ENVIAR PDF</button>
-			</footer>
-		</div>
-	`;
+const clearMessage = () => {
+	const messageDiv = document.getElementById(overlayIds.message);
+	if (!messageDiv) return;
+	messageDiv.style.display = 'none';
+	messageDiv.textContent = '';
+};
 
-	document.body.appendChild(overlay);
+const renderItems = items => {
+	const picker = document.getElementById(overlayIds.pickerInner);
+	if (!picker) return;
+	picker.innerHTML = '';
 
-	const picker = overlay.querySelector(`#${overlayIds.pickerInner}`);
-	const items = Array.from(overlay.querySelectorAll('.hero-ssd-item'));
-	let selectedId = null;
+	const topSpacer = document.createElement('div');
+	topSpacer.className = 'hero-ssd-spacer';
+	picker.appendChild(topSpacer);
+
+	items.forEach(item => {
+		const div = document.createElement('div');
+		div.className = 'hero-ssd-item';
+		div.dataset.name = item.name;
+		div.dataset.label = item.displayName;
+		div.textContent = item.displayName;
+		picker.appendChild(div);
+	});
+
+	const bottomSpacer = document.createElement('div');
+	bottomSpacer.className = 'hero-ssd-spacer';
+	picker.appendChild(bottomSpacer);
+
+	const itemsEls = Array.from(picker.querySelectorAll('.hero-ssd-item'));
+	let selectedEl = null;
 
 	const updateActiveItem = () => {
 		const pickerRect = picker.getBoundingClientRect();
 		const centerY = pickerRect.top + pickerRect.height / 2;
 		let closestItem = null;
 		let closestDistance = Infinity;
-		items.forEach(item => {
+		itemsEls.forEach(item => {
 			const rect = item.getBoundingClientRect();
 			const itemCenterY = rect.top + rect.height / 2;
 			const distance = Math.abs(centerY - itemCenterY);
@@ -167,97 +136,147 @@ const ensureOverlay = (index) => {
 				closestItem = item;
 			}
 		});
-		items.forEach(item => item.classList.remove('hero-ssd-active'));
+		itemsEls.forEach(item => item.classList.remove('hero-ssd-active'));
 		if (closestItem) {
 			closestItem.classList.add('hero-ssd-active');
-			selectedId = closestItem.dataset.id;
+			selectedEl = closestItem;
+			state.selectedName = closestItem.dataset.name;
 		}
 	};
 
-	picker.addEventListener('scroll', updateActiveItem);
-	items.forEach(item => { item.onclick = () => item.scrollIntoView({ behavior: 'smooth', block: 'center' }); });
-	setTimeout(() => { if (items[0]) { items[0].scrollIntoView({ block: 'center' }); updateActiveItem(); } }, 100);
+	picker.onscroll = updateActiveItem;
+	itemsEls.forEach(item => {
+		item.onclick = () => item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+	});
+	setTimeout(() => {
+		if (itemsEls[0]) {
+			itemsEls[0].scrollIntoView({ block: 'center' });
+			updateActiveItem();
+		}
+	}, 100);
 
-	overlay.querySelector(`#${overlayIds.close}`).onclick = () => overlay.remove();
-	overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+};
 
-	const messageDiv = overlay.querySelector(`#${overlayIds.message}`);
-	overlay.querySelector(`#${overlayIds.send}`).onclick = async () => {
-		if (!selectedId) {
-			messageDiv.style.display = 'block';
-			messageDiv.style.background = '#fff3cd';
-			messageDiv.style.color = '#856404';
-			messageDiv.textContent = '⚠️ Selecione um produto';
-			setTimeout(() => messageDiv.style.display = 'none', 3000);
+const refreshList = async () => {
+	const picker = document.getElementById(overlayIds.pickerInner);
+	if (!picker) return;
+
+	clearMessage();
+	picker.innerHTML = '<div class="hero-ssd-item" style="padding:20px; text-align:center;">Carregando...</div>';
+
+	try {
+		const files = await listFilesByType(state.directoryHandle, state.selectedType);
+		if (!files.length) {
+			setMessage('Nenhum PDF encontrado para este tipo. Verifique a pasta HEROIA/pdf.', 'warning');
+			picker.innerHTML = '';
 			return;
 		}
-		const tipo = overlay.querySelector(`#${overlayIds.tipo}`).value;
-		const result = await sendPdf(selectedId, tipo, messageDiv);
-		if (result) overlay.remove();
+		renderItems(files);
+	} catch (err) {
+		setMessage(err.message, 'error');
+		picker.innerHTML = '';
+	}
+};
+
+const rebuildOverlay = () => {
+	const existing = document.getElementById(overlayIds.overlay);
+	if (existing) existing.remove();
+
+	const overlay = document.createElement('div');
+	overlay.id = overlayIds.overlay;
+	overlay.innerHTML = `
+		<div class="hero-ssd-panel" id="${overlayIds.panel}">
+			<header>
+				<strong>Enviar PDF (Local)</strong>
+				<div style="display:flex; gap:8px; align-items:center;">
+					<button id="${overlayIds.reconnect}" title="Reconectar pasta" style="background: #1565c0; border: 1px solid #0d47a1; color: #fff; border-radius: 6px; padding: 6px 10px; cursor: pointer;">Reconectar</button>
+					<button id="${overlayIds.close}">×</button>
+				</div>
+			</header>
+			<section>
+				<label>Tipo de Documento</label>
+				<select id="${overlayIds.tipo}">
+					${pdfTypes.map(type => `<option value="${type.value}">${type.label}</option>`).join('')}
+				</select>
+				<label>Selecione o arquivo</label>
+				<div class="hero-ssd-picker" id="${overlayIds.picker}">
+					<div class="hero-ssd-picker-inner" id="${overlayIds.pickerInner}"></div>
+					<div class="hero-ssd-picker-fade-bottom"></div>
+				</div>
+			</section>
+			<footer>
+				<div id="${overlayIds.message}" style="display:none; padding:8px; margin-bottom:8px; border-radius:4px; font-size:13px; text-align:center;"></div>
+				<button id="${overlayIds.send}">ENVIAR PDF</button>
+			</footer>
+		</div>
+	`;
+
+	document.body.appendChild(overlay);
+
+	const select = overlay.querySelector(`#${overlayIds.tipo}`);
+	select.value = state.selectedType;
+	select.onchange = async () => {
+		state.selectedType = select.value;
+		state.selectedName = null;
+		await refreshList();
+	};
+
+	const reconnectBtn = overlay.querySelector(`#${overlayIds.reconnect}`);
+	reconnectBtn.onclick = async () => {
+		setMessage('Solicitando nova pasta...', 'info');
+		const handle = await reconnectFlow();
+		if (!handle) {
+			setMessage('Pasta não conectada. Autorize o acesso para continuar.', 'error');
+			return;
+		}
+		state.directoryHandle = handle;
+		clearMessage();
+		await refreshList();
+	};
+
+	const closeBtn = overlay.querySelector(`#${overlayIds.close}`);
+	closeBtn.onclick = () => overlay.remove();
+	overlay.onclick = event => { if (event.target === overlay) overlay.remove(); };
+
+	const sendBtn = overlay.querySelector(`#${overlayIds.send}`);
+	sendBtn.onclick = async () => {
+		if (!state.selectedName) {
+			setMessage('⚠️ Selecione um PDF para enviar.', 'warning');
+			return;
+		}
+		sendBtn.disabled = true;
+		sendBtn.textContent = 'Anexando...';
+		try {
+			const file = await getFileByName(state.directoryHandle, state.selectedName);
+			await injectFileIntoWhatsApp(file);
+			const label = document.querySelector(`.${overlayIds.item}.hero-ssd-active`)?.dataset?.label || state.selectedName;
+			insertTextDraft(`Segue o PDF ${label}.`);
+			showNotification('✅ PDF anexado no WhatsApp. Confirme o envio.', 'success');
+			overlay.remove();
+		} catch (err) {
+			setMessage(err.message, 'error');
+		} finally {
+			sendBtn.disabled = false;
+			sendBtn.textContent = 'ENVIAR PDF';
+		}
 	};
 
 	return overlay;
 };
 
-const sendPdf = async (produtoId, tipo, messageDiv) => {
-	if (!ssdIndex) return false;
-	const produto = ssdIndex[produtoId];
-	if (!produto) {
-		alert(`Produto não encontrado: ${produtoId}`);
-		return false;
-	}
-
-	if (!produto.docs || produto.docs[tipo] === null || produto.docs[tipo] === 'null') {
-		const tipoLabel = { book: 'Book', preco: 'Tabela de Preço', disponibilidade: 'Tabela de Disponibilidade', repasse: 'Tabela de Repasses' }[tipo] || tipo;
-		messageDiv.style.display = 'block';
-		messageDiv.style.background = '#f8d7da';
-		messageDiv.style.color = '#721c24';
-		messageDiv.textContent = `❌ ${tipoLabel} não disponível`;
-		setTimeout(() => messageDiv.style.display = 'none', 3000);
-		return false;
-	}
-
-	const pdfFileName = produto.docs[tipo];
-	const url = `${ssdBase}/pdf/${tipo}/${pdfFileName}`;
-
-	try {
-		const pdfData = await fetchPdfViaContent(url);
-		const response = await fetch(pdfData);
-		const blob = await response.blob();
-		const fileUrl = URL.createObjectURL(blob);
-
-		const tipoInfo = {
-			book: { artigo: 'o', label: 'Book' },
-			preco: { artigo: 'a', label: 'Tabela de Preço' },
-			disponibilidade: { artigo: 'a', label: 'Tabela de Disponibilidade' },
-			repasse: { artigo: 'a', label: 'Tabela de Repasses' }
-		}[tipo] || { artigo: 'o', label: tipo };
-
-		const text = `Segue (${tipoInfo.artigo}) ${tipoInfo.label} do empreendimento ${produto.nome}, conforme solicitado.\n\n🔗 ${ssdBase}/pdf/${tipo}/${produtoId}.pdf`;
-		insertTextDraft(text);
-
-		const a = document.createElement('a');
-		a.href = fileUrl;
-		a.download = `${produto.nome} - ${tipo}.pdf`;
-		document.body.appendChild(a);
-		a.click();
-		document.body.removeChild(a);
-		URL.revokeObjectURL(fileUrl);
-
-		showNotification('✅ Texto inserido! 📎 PDF baixado. Arraste o arquivo para anexar.', 'success');
-		return true;
-	} catch (err) {
-		alert(`Erro ao carregar o PDF:\n${err.message}\n\nURL tentada: ${url}`);
-		return false;
-	}
-};
-
 export const runPdf = async () => {
 	try {
-		ensureFetchListener();
-		await loadIndex();
-		ensureOverlay(ssdIndex);
+		ensureSupport();
+		const handle = await getUsableDirectoryHandle();
+		if (!handle) {
+			alert('Selecione a pasta HEROIA/pdf para enviar PDFs localmente.');
+			return;
+		}
+		state.directoryHandle = handle;
+		await ensurePermission(handle);
+		rebuildOverlay();
+		await refreshList();
 	} catch (err) {
-		alert('Erro ao carregar lista de produtos. Verifique sua conexão.');
+		alert(`Erro ao carregar PDFs locais: ${err.message}`);
 	}
 };
