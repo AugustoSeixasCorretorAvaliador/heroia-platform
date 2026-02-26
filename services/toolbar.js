@@ -10,6 +10,7 @@ const INFO_CLOSE_ID = 'heroia-info-close';
 let handlers = {
 	onCoreDraft: null,
 	onCoreFollowUp: null,
+	onCoreRefine: null,
 	onPdf: null,
 	onAudio: null,
 	onCredito: null,
@@ -18,11 +19,12 @@ let handlers = {
 
 let toolbarEl = null;
 let infoListenersBound = false;
-const loadingTracked = new Set(['onCoreDraft', 'onCoreFollowUp', 'onAudio']);
+const loadingTracked = new Set(['onCoreDraft', 'onCoreFollowUp', 'onCoreRefine' , 'onAudio']);
 
 const buttonConfig = [
 	{ id: 'hero-btn-core-draft', label: '✍️ Gerar rascunho', className: 'hero-btn', handlerKey: 'onCoreDraft' },
 	{ id: 'hero-btn-core-follow', label: '🧠 Copiloto 🔁', className: 'hero-btn hero-btn-quaternary', handlerKey: 'onCoreFollowUp' },
+	{ id: 'hero-btn-core-refine', label: '📝 Refinar TXT', className: 'hero-btn hero-btn-primary', handlerKey: 'onCoreRefine' },
 	{ id: 'hero-btn-pdf', label: '📄 PDF', className: 'hero-btn hero-btn-tertiary', handlerKey: 'onPdf' },
 	{ id: 'hero-btn-audio', label: '🎧 Audio', className: 'hero-btn hero-btn-muted', handlerKey: 'onAudio' },
 	{ id: 'hero-btn-credito', label: '💰 Crédito', className: 'hero-btn hero-btn-secondary', handlerKey: 'onCredito' },

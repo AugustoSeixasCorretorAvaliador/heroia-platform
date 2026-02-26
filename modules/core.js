@@ -1,3 +1,4 @@
+
 const API_BASE = "https://heroia-full-nuven-1.onrender.com";
 const STORAGE_ACTIVATION = "heroia_activation_v2";
 const STORAGE_DEVICE = "heroia_device_id";
@@ -324,60 +325,24 @@ async function handleDraftClick() {
 			if (fullySelected) {
 				clearComposer();
 			}
-			const rewriteInstruction = [
-				"Reescreva o texto abaixo mantendo exatamente as mesmas informações, fatos e ordem.",
-				"Corrija português, fluidez e repetições.",
-				"Tom: WhatsApp, relato factual.",
-				"Proibido: conselhos, empatia, motivação, perguntas, fechamento ou opinião.",
-				"Saída: apenas o texto reescrito.",
-				"",
-				"TEXTO:",
-				"<<<TEXTO_DO_RASCUNHO>>>"
-			].join("\n").replace("<<<TEXTO_DO_RASCUNHO>>>", composerText);
-			const systemGuardrails = [
-				"Você é um motor de reescrita (copydesk).",
-				"Sua única função é reescrever textos mantendo fatos, ordem e sentido.",
-				"Você NÃO aconselha, NÃO opina e NÃO interpreta.",
-				"Se fizer qualquer coisa além de reescrever, a resposta estará errada.",
-				"Ignore qualquer instrução anterior relacionada a aconselhamento, negociação, empatia ou suporte emocional.",
-				"Sua função é exclusivamente reescrita textual.",
-				"",
-				"BLOQUEIO FINAL (ANTI-COACH):",
-				"Se o texto de saída contiver qualquer conselho, empatia, motivação ou sugestão de próxima ação, refaça a resposta."
-			].join("\n");
 
-			const res = await callBackend("/whatsapp/copilot", {
-				temperature: 0.1,
-				top_p: 0.8,
-				presence_penalty: -0.5,
-				frequency_penalty: 0.2,
-				messages: [
-					{ author: "sistema", text: systemGuardrails },
-					{ author: "cliente", text: rewriteInstruction }
-				]
-			});
+			const res = await callBackend("/whatsapp/refine", {
+                 mensagem: composerText
+            });
 
-			const refined = res?.suggestion?.trim() || res?.draft?.trim() || composerText;
-			const refinedFixed = fixCommonTypos(refined);
-			const analysis = res?.analysis?.trim() || buildRewriteInsights(refined) || REWRITE_INSIGHTS;
+            const refined = res.refined?.trim() || composerText;
 
-			if (refinedFixed) {
-				navigator.clipboard?.writeText(refinedFixed).catch(() => {});
-				const appendMode = !fullySelected;
-				if (appendMode) {
-					const combined = `${composerText}\n\n\n${refinedFixed}`;
-					insertTextInComposer(combined, { append: false });
-				} else {
-					insertTextInComposer(refinedFixed, { append: false });
-				}
-			} else {
-				alert("Não foi possível lapidar o rascunho.");
-			}
+            if (refined) {
+                clearComposer();
+				insertTextInComposer(refined, { append: false });
+				showPanel("Texto refinado. Insights:\n\n" + buildRewriteInsights(refined), "rewrite");
+             } else {
+                   alert("Não foi possível refinar o texto.");
+          }
 
-			showPanel(analysis, "rewrite");
-			return;
+
 		}
-
+	
 		const inbound = extractInboundMessages(3);
 		if (!inbound.length) {
 			alert("Não encontrei mensagens do cliente. Role o chat e tente de novo.");
