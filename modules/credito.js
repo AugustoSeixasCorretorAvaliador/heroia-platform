@@ -43,11 +43,15 @@ const extrairDados = (conversa) => {
 		if (lower.includes('sac')) { dados.sistema = 'SAC'; dados.hasSac = true; }
 		if (lower.includes('price')) { dados.sistema = 'PRICE'; dados.hasPrice = true; }
 	});
+	// Entrada pode não ser informada; trate como zero para não bloquear a simulação.
+	if (dados.entrada === null) dados.entrada = 0;
+	// FGTS opcional.
+	if (dados.fgts === null) dados.fgts = 0;
 	return dados;
 };
 
 const camposObrigatoriosPreenchidos = (dados) => (
-	dados.valor !== null && dados.entrada !== null && dados.renda !== null && dados.prazo !== null
+	dados.valor !== null && dados.renda !== null && dados.prazo !== null
 );
 
 const calcularPrice = (pv, taxaAnual, meses) => {

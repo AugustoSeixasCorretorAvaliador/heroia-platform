@@ -51,6 +51,10 @@
 	box-shadow: none;
 }
 
+.hero-btn-primary {
+	background: linear-gradient(135deg, #9e4613, #9e4613);
+}
+
 .hero-btn-secondary {
 	background: linear-gradient(135deg, #2f8a59, #236a44);
 }

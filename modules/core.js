@@ -3,17 +3,6 @@ const API_BASE = "https://heroia-full-nuven-1.onrender.com";
 const STORAGE_ACTIVATION = "heroia_activation_v2";
 const STORAGE_DEVICE = "heroia_device_id";
 const PANEL_ID = "heroia-analysis-panel";
-const REWRITE_PROMPT = "Sua tarefa é reescrever, lapidar e melhorar o texto abaixo.\nNão explique nada, não faça comentários, não adicione introduções.\nEntregue apenas a resposta final pronta para envio ao cliente.\nMantenha tom profissional, claro e estratégico, com linguagem adequada ao mercado imobiliário.\nNão cite empreendimentos, valores ou dados específicos, a menos que estejam explicitamente no texto original.\nTexto original: <<<TEXTO_DO_RASCUNHO>>>";
-const REWRITE_INSIGHTS = [
-	"Organizei num texto claro, profissional e fácil de entender, sem parecer pressão. Pronto para enviar no WhatsApp.",
-	"Por que funciona tão bem?",
-	"- Resolve o medo principal do cliente.",
-	"- Explica o processo sem bancês e traduz em benefícios práticos.",
-	"- Reposiciona você como consultor, não apenas vendedor.",
-	"- A lista de documentos passa credibilidade e seriedade.",
-	"- Antecipação de objeções sem confronto.",
-	"- Fechamento é leve (sem pressão)."
-].join("\n");
 
 const state = { loadingDraft: false, loadingCopilot: false };
 
@@ -103,12 +92,9 @@ function extractInboundMessages(limit = 3) {
 	const dataElements = Array.from(root.querySelectorAll("[data-pre-plain-text]"));
 
 	const BOT_MARKERS = [
-		"spin vendas",
 		"creci-rj",
-		"augusto seixas",
 		"compra • venda",
 		"compra • venda • aluguel",
-		"augustoseixascorretor.com.br"
 	];
 
 	const isBotText = (text = "") => {
@@ -397,3 +383,12 @@ async function handleCopilotClick() {
 
 export const runCoreDraft = handleDraftClick;
 export const runCoreFollowUp = handleCopilotClick;
+export {
+	getComposerText,
+	clearComposer,
+	insertTextInComposer,
+	buildRewriteInsights,
+	showPanel,
+	callBackend,
+	createPanel
+};
