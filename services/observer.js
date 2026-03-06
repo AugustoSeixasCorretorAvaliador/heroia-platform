@@ -1,25 +1,33 @@
 let observerInstance = null;
 let queued = false;
 
-// Create a single MutationObserver that keeps the toolbar present.
 export const start = (ensureToolbarCb) => {
-	if (observerInstance || typeof ensureToolbarCb !== 'function') return;
+
+	if (observerInstance) return;
 
 	const runEnsure = () => {
+
 		queued = false;
-		ensureToolbarCb();
+
+		if (typeof ensureToolbarCb === 'function') {
+			ensureToolbarCb();
+		}
+
 	};
 
-	ensureToolbarCb();
-
 	observerInstance = new MutationObserver(() => {
+
 		if (queued) return;
+
 		queued = true;
-		// Batch DOM mutations to avoid excessive work.
+
 		requestAnimationFrame(runEnsure);
+
 	});
 
-	observerInstance.observe(document.body, {
+	const target = document.body || document.documentElement;
+
+	observerInstance.observe(target, {
 		childList: true,
 		subtree: true
 	});
